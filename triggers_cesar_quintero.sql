@@ -64,3 +64,41 @@ values (@contador,@orderno,new.product_reference,new.product_quantity,@precio, n
 
 END//
 DELIMITER ;
+
+USE `tum12607_pretashop1609`;
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` TRIGGER `ps_order_detail_update` AFTER UPDATE ON `ps_order_detail` FOR EACH ROW
+begin
+	
+	DECLARE done INT DEFAULT FALSE;
+    DECLARE product_reference VARCHAR(100);
+	DECLARE product_quantity INT(10);
+    DECLARE detail_cursor CURSOR FOR SELECT product_reference, product_quantity FROM ps_order_detail WHERE id_order = new.id_order;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    OPEN detail_cursor;
+	set @contador = 0;
+	set @orderno = (select orderno from tum12607_maracay.salesorders where id_order = new.id_order);
+	#borrar los registros
+	delete from tum12607_maracay.salesorderdetails where orderno = @orderno;
+	    read_loop: LOOP
+#(@contador,@orderno,new.product_reference,new.product_quantity,@precio, new.product_quantity,0,0,NOW(),0,0,0000-00-00,0,0,0);
+        FETCH detail_cursor INTO product_reference,product_quantity;
+
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+		#empezo eso..
+		SET @id_currency = (SELECT id_currency from ps_orders where id_order = new.id_order limit 1);
+		SET @iso_code = (SELECT iso_code from ps_currency where id_currency = @id_currency limit 1);
+		SET @taxrate = (SELECT taxrate from tum12607_maracay.taxauthrates where currabrev = @iso_code and dispatchtaxprovince = 1);
+		SET @precio = (new.unit_price_tax_incl / (1 + @taxrate));
+        insert into tum12607_maracay.salesorderdetails (orderlineno,orderno,stkcode,qtyinvoiced,unitprice,quantity,estimate,discountpercent,actualdispatchdate,completed,narrative,itemdue,poline,commissionrate,commissionearned)
+		values (@contador,@orderno,product_reference,product_quantity,@precio, product_quantity,0,0,NOW(),0,0,0000-00-00,0,0,0);
+		set @contador = @contador+1;
+
+    END LOOP;
+	CLOSE detail_cursor;
+
+end$$
+DELIMIETE ;
